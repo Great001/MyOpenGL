@@ -20,7 +20,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void initGlSurfaceView() {
         mGlSurfaceView.setEGLContextClientVersion(2);
-        mRenderer = new MyRenderer();
+        mRenderer = new MyRenderer(this.getApplicationContext());
         mGlSurfaceView.setRenderer(mRenderer);
         mGlSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
         mGlSurfaceView.requestRender();
