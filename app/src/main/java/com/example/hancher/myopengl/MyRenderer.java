@@ -5,11 +5,12 @@ import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.util.Log;
 
-import javax.microedition.khronos.egl.EGLConfig;
-import javax.microedition.khronos.opengles.GL10;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+
+import javax.microedition.khronos.egl.EGLConfig;
+import javax.microedition.khronos.opengles.GL10;
 
 /**
  * Created by liaohaicong on 2018/8/3.
@@ -20,82 +21,109 @@ public class MyRenderer implements GLSurfaceView.Renderer {
 
     public static final String TAG = "OpenGL";
 
-    private MyShader mShader;
+    public static final int COMPONENT_COUNT_PER_FLOAT = 4;
+    public static final int VERTEX_POSITION_COMPONENT_COUNT = 2;  //X,Y两个分量
+    public static final int TEXTURE_POSITION_COMPONENT_COUNT = 2; //S,T分量
+    public static final int STRIDE = (VERTEX_POSITION_COMPONENT_COUNT + TEXTURE_POSITION_COMPONENT_COUNT) * COMPONENT_COUNT_PER_FLOAT;
+
+    /**
+     * 着色器程序
+     */
+    private Shader mShader;
+    /**
+     * 纹理贴图
+     */
     private Texture mTexture;
-
-    private int mPositionLocation;
-    private int mTexPositionLocation;
-
+    /**
+     * 顶点坐标引用（句柄）
+     */
+    private int mVertexPosLocation;
+    /**
+     * \纹理坐标引用（句柄）
+     */
+    private int mTexturePosLocation;
+    /**
+     * 纹理数据引用（句柄）
+     */
+    private int mTexUnitLocation;
+    /**
+     * 顶点数据（使用FloatBuffer作为CPU和GPU传递的载体）
+     * 包含两个属性：顶点坐标和纹理坐标
+     */
     private FloatBuffer mVertexBuffer;
-    private FloatBuffer mTexPosBuffer;
 
     private Context mContext;
 
     private static final float[] VERTEX_DATA = new float[]{
-            -1f, -0.5f,
-            1f,-0.5f,
-            0f,0.5f
+            //x,y,s,t(纹理坐标t要反方向)
+            -0.5f, -0.5f, 0.2f, 0.6f,
+            0.5f, 0.5f, 0.6f, 0.2f,
+            -0.5f, 0.5f, 0.2f, 0.2f,
+            -0.5f, -0.5f, 0.2f, 0.6f,
+            0.5f, -0.5f, 0.6f, 0.6f,
+            0.5f, 0.5f, 0.6f, 0.2f
     };
 
-    private static final float[] TEX_DATA = new float[]{
-            0.2f, 0.2f,
-            1f,0.2f,
-            1f,1f
-    };
 
     public MyRenderer(Context context) {
-        mShader = new MyShader();
         mContext = context;
+        mShader = new Shader();
+        //此时还不能任何OpenGL的操作，需要在Renderer的onSurfaceCreated回调之后，绑定到EGLContext才能调用GLES20;
     }
 
     private void initVertexBuffer() {
-        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(6 * 4);
-        byteBuffer.order(ByteOrder.nativeOrder());
+        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(VERTEX_DATA.length * COMPONENT_COUNT_PER_FLOAT).
+                order(ByteOrder.nativeOrder());
         mVertexBuffer = byteBuffer.asFloatBuffer();
         mVertexBuffer.put(VERTEX_DATA);
-        mVertexBuffer.position(0);
-
-        ByteBuffer byteBufferTex = ByteBuffer.allocateDirect(6 * 4);
-        byteBufferTex.order(ByteOrder.nativeOrder());
-        mTexPosBuffer = byteBufferTex.asFloatBuffer();
-        mTexPosBuffer.put(TEX_DATA);
-        mTexPosBuffer.position(0);
-    }
-
-    public void drawPoint() {
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mTexture.mTextureId);
-        GLES20.glUniform1i(mTexPositionLocation, 0);
-
-
-        GLES20.glEnableVertexAttribArray(mPositionLocation);
-        GLES20.glEnableVertexAttribArray(mTexPositionLocation);
-        GLES20.glVertexAttribPointer(mPositionLocation, 2, GLES20.GL_FLOAT, false, 0, mVertexBuffer);
-        GLES20.glVertexAttribPointer(mTexPositionLocation, 2, GLES20.GL_FLOAT, false, 0, mTexPosBuffer);
-
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 3);
-
-        GLES20.glDisableVertexAttribArray(mPositionLocation);
-        GLES20.glDisableVertexAttribArray(mTexPositionLocation);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
-        GLES20.glFlush();
-        GLES20.glFinish();
+        mVertexBuffer.position(0);  //必须调用，否则回调IndexOutOfBoundsException
     }
 
     private void initLocation() {
-        mPositionLocation = GLES20.glGetAttribLocation(mShader.mProgramId, MyShader.A_POSITION);
-        mTexPositionLocation = GLES20.glGetAttribLocation(mShader.mProgramId, MyShader.A_TEXPOSITION);
+        mVertexPosLocation = GLES20.glGetAttribLocation(mShader.mProgramId, Shader.A_POSITION);
+        mTexturePosLocation = GLES20.glGetAttribLocation(mShader.mProgramId, Shader.A_TEXPOSITION);
+        mTexUnitLocation = GLES20.glGetUniformLocation(mShader.mProgramId, Shader.U_TEXTURE);
+    }
+
+
+    private void startDraw() {
+        //激活纹理
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);  //激活纹理单元0
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mTexture.mTextureId);  //绑定纹理
+        GLES20.glUniform1i(mTexUnitLocation, 0);  //传递纹理数据到纹理单元0
+
+        //传递顶点数据
+        GLES20.glEnableVertexAttribArray(mVertexPosLocation);
+        GLES20.glEnableVertexAttribArray(mTexturePosLocation);
+        //顶点数据传递到GPU中引用指向的变量
+        GLES20.glVertexAttribPointer(mVertexPosLocation, VERTEX_POSITION_COMPONENT_COUNT, GLES20.GL_FLOAT, false, STRIDE, mVertexBuffer);
+        mVertexBuffer.position(VERTEX_POSITION_COMPONENT_COUNT);
+        GLES20.glVertexAttribPointer(mTexturePosLocation, TEXTURE_POSITION_COMPONENT_COUNT, GLES20.GL_FLOAT, false, STRIDE, mVertexBuffer);
+
+        //开始绘制
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6);  //第二个参数 偏移量  第三个参数：顶点个数
+
+        //结束绘制
+        GLES20.glDisableVertexAttribArray(mVertexPosLocation);
+        GLES20.glDisableVertexAttribArray(mTexturePosLocation);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);  //解除纹理绑定
+        GLES20.glFlush();
+        GLES20.glFinish();
     }
 
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         Log.d(TAG, "onSurfaceCreated");
+        //指定清屏颜色RGBA
         GLES20.glClearColor(1, 1, 1, 1);
+        //激活着色器程序
         mShader.initShaderProgram();
-        GLES20.glUseProgram(mShader.mProgramId);
+        //获取着色器程序中的变量引用
         initLocation();
+        //初始化顶点数据
         initVertexBuffer();
-        mTexture = Texture.loadTexture(mContext, R.drawable.bucket);
+        //加载纹理贴图
+        mTexture = Texture.loadTexture(mContext, R.drawable.test);
     }
 
     @Override
@@ -107,7 +135,8 @@ public class MyRenderer implements GLSurfaceView.Renderer {
     @Override
     public void onDrawFrame(GL10 gl) {
         Log.d(TAG, "onDrawFrame");
+        //刷新屏幕
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-        drawPoint();
+        startDraw();
     }
 }

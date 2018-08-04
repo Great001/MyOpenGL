@@ -8,16 +8,16 @@ import android.util.Log;
  * 着色器程序
  */
 
-public class MyShader {
+public class Shader {
 
     public static final String TAG = "OpenGL";
 
     private static final String VERTEX_SHADER = "attribute vec4 a_position;\n" +
-            "uniform vec2 a_texPosition;\n" +
+            "attribute vec2 a_texPosition;\n" +
             "varying vec2 v_texPosition;\n" +
             "\n" +
             "void main(){\n" +
-            "    gl_Position = a_position;\n" +
+            "    gl_Position = a_position;\n" +    // 必须是4分量向量
             "    gl_PointSize = 1000.0;\n" +
             "    v_texPosition = a_texPosition;\n" +
             "}";
@@ -31,12 +31,13 @@ public class MyShader {
 
     public static final String A_POSITION = "a_position";
     public static final String A_TEXPOSITION = "a_texPosition";
+    public static final String U_TEXTURE = "u_texture";
     public static final String U_COLOR = "u_color";
 
     public int mProgramId;
 
 
-    public void initShaderProgram() {
+    public boolean initShaderProgram() {
         int vertexShader = loadVertexShader();
         int fragmentShader = loadFragmentShader();
 
@@ -49,7 +50,10 @@ public class MyShader {
         GLES20.glGetProgramiv(mProgramId, GLES20.GL_LINK_STATUS, linkStatus, 0);
         if (linkStatus[0] == 0) {
             Log.d(TAG, "link program error");
+            return false;
         }
+        GLES20.glUseProgram(mProgramId);
+        return true;
     }
 
     public int loadVertexShader() {
