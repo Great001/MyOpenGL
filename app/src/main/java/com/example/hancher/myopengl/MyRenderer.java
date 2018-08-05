@@ -21,10 +21,12 @@ public class MyRenderer implements GLSurfaceView.Renderer {
 
     public static final String TAG = "OpenGL";
 
-    public static final int COMPONENT_COUNT_PER_FLOAT = 4;
+    public static final int BYTES_PER_FLOAT = 4;
     public static final int VERTEX_POSITION_COMPONENT_COUNT = 2;  //X,Y两个分量
     public static final int TEXTURE_POSITION_COMPONENT_COUNT = 2; //S,T分量
-    public static final int STRIDE = (VERTEX_POSITION_COMPONENT_COUNT + TEXTURE_POSITION_COMPONENT_COUNT) * COMPONENT_COUNT_PER_FLOAT;
+    public static final int STRIDE = (VERTEX_POSITION_COMPONENT_COUNT + TEXTURE_POSITION_COMPONENT_COUNT) * BYTES_PER_FLOAT;
+
+    public static final int GRID_COLUMN_COUNT = 10;
 
     /**
      * 着色器程序
@@ -52,6 +54,8 @@ public class MyRenderer implements GLSurfaceView.Renderer {
      */
     private FloatBuffer mVertexBuffer;
 
+    private FloatBuffer mGridVertexBuffer;
+
     private Context mContext;
 
     private static final float[] VERTEX_DATA = new float[]{
@@ -72,12 +76,57 @@ public class MyRenderer implements GLSurfaceView.Renderer {
     }
 
     private void initVertexBuffer() {
-        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(VERTEX_DATA.length * COMPONENT_COUNT_PER_FLOAT).
+        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(VERTEX_DATA.length * BYTES_PER_FLOAT).
                 order(ByteOrder.nativeOrder());
         mVertexBuffer = byteBuffer.asFloatBuffer();
         mVertexBuffer.put(VERTEX_DATA);
         mVertexBuffer.position(0);  //必须调用，否则回调IndexOutOfBoundsException
     }
+
+    private void initGridVertexBuffer() {
+        //一个格子需要8个点
+        float gridItemSize = (0.5f + 0.5f) / 10;  //每个格子间距
+        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(GRID_COLUMN_COUNT * GRID_COLUMN_COUNT * 8 * 2 * BYTES_PER_FLOAT)
+                .order(ByteOrder.nativeOrder());
+        mGridVertexBuffer = byteBuffer.asFloatBuffer();
+        //一个个画格子
+        for (int i = 0; i < GRID_COLUMN_COUNT; i++)
+            for (int j = 0; j < GRID_COLUMN_COUNT; j++) {
+                //上面横线
+                //左上角
+                mGridVertexBuffer.put(-0.5f + gridItemSize * j);
+                mGridVertexBuffer.put(0.5f - gridItemSize * i);
+                //右上角
+                mGridVertexBuffer.put(-0.5f + gridItemSize * (j + 1));
+                mGridVertexBuffer.put(0.5f - gridItemSize * i);
+
+                //右边竖线
+                //右上角
+                mGridVertexBuffer.put(-0.5f + gridItemSize * (j + 1));
+                mGridVertexBuffer.put(0.5f - gridItemSize * i);
+                //右下角
+                mGridVertexBuffer.put(-0.5f + gridItemSize * (j + 1));
+                mGridVertexBuffer.put(0.5f - gridItemSize * (i + 1));
+
+                //下边横线
+                //右下角
+                mGridVertexBuffer.put(-0.5f + gridItemSize * (j + 1));
+                mGridVertexBuffer.put(0.5f - gridItemSize * (i + 1));
+                //左下角
+                mGridVertexBuffer.put(-0.5f + gridItemSize * j);
+                mGridVertexBuffer.put(0.5f - gridItemSize * (i+1));
+
+                //左边竖线
+                //左下角
+                mGridVertexBuffer.put(-0.5f + gridItemSize * j);
+                mGridVertexBuffer.put(0.5f - gridItemSize * (i+1));
+                //左上角
+                mGridVertexBuffer.put(-0.5f + gridItemSize * j);
+                mGridVertexBuffer.put(0.5f - gridItemSize * i);
+            }
+            mGridVertexBuffer.position(0);
+    }
+
 
     private void initLocation() {
         mVertexPosLocation = GLES20.glGetAttribLocation(mShader.mProgramId, Shader.A_POSITION);
@@ -86,7 +135,7 @@ public class MyRenderer implements GLSurfaceView.Renderer {
     }
 
 
-    private void startDraw() {
+    private void startDrawPicture() {
         //激活纹理
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);  //激活纹理单元0
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mTexture.mTextureId);  //绑定纹理
@@ -111,6 +160,24 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         GLES20.glFinish();
     }
 
+    private void startDrawGrid(){
+        //激活纹理
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);  //激活纹理单元0
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mTexture.mTextureId);  //绑定纹理
+        GLES20.glUniform1i(mTexUnitLocation, 0);  //传递纹理数据到纹理单元0
+
+        GLES20.glEnableVertexAttribArray(mVertexPosLocation);
+        GLES20.glVertexAttribPointer(mVertexPosLocation,VERTEX_POSITION_COMPONENT_COUNT,GLES20.GL_FLOAT,false,0,mGridVertexBuffer);
+        GLES20.glDrawArrays(GLES20.GL_LINES,0,8 * GRID_COLUMN_COUNT * GRID_COLUMN_COUNT);
+
+        //结束绘制
+        GLES20.glDisableVertexAttribArray(mVertexPosLocation);
+        GLES20.glDisableVertexAttribArray(mTexturePosLocation);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);  //解除纹理绑定
+        GLES20.glFlush();
+        GLES20.glFinish();
+    }
+
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         Log.d(TAG, "onSurfaceCreated");
@@ -122,6 +189,8 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         initLocation();
         //初始化顶点数据
         initVertexBuffer();
+        //初始化格子顶点数据
+        initGridVertexBuffer();
         //加载纹理贴图
         mTexture = Texture.loadTexture(mContext, R.drawable.test);
     }
@@ -137,6 +206,7 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         Log.d(TAG, "onDrawFrame");
         //刷新屏幕
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
-        startDraw();
+        startDrawPicture();
+        startDrawGrid();
     }
 }
