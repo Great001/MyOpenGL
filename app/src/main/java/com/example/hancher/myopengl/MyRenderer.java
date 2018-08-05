@@ -178,6 +178,26 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         GLES20.glFinish();
     }
 
+    /**
+     * 纹理数据部分替换（左上角）
+     */
+    private void replaceSubTexture(){
+        int texelCount = 44 * 44;
+        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4 * texelCount + 4);
+        byteBuffer.order(ByteOrder.nativeOrder());
+        for(int i = 0; i < texelCount ;  i++){
+            //红色替换
+            byteBuffer.put((byte) 255);
+            byteBuffer.put((byte)0);
+            byteBuffer.put((byte)0);
+            byteBuffer.put((byte)0);
+        }
+        byteBuffer.position(0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,mTexture.mTextureId);
+        //替换纹理数据（二维数组）参数3：xOffset 参数4：yOffset 参数5：替换的纹理数据的宽度  参数5:替换的纹理数据的高度 参数6：format  参数7：type  参数8 ：替换的纹理数据buffer
+        GLES20.glTexSubImage2D(GLES20.GL_TEXTURE_2D,0,200,200,44,44,GLES20.GL_RGBA,GLES20.GL_UNSIGNED_BYTE,byteBuffer);
+    }
+
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
         Log.d(TAG, "onSurfaceCreated");
@@ -206,6 +226,7 @@ public class MyRenderer implements GLSurfaceView.Renderer {
         Log.d(TAG, "onDrawFrame");
         //刷新屏幕
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+        replaceSubTexture();  //测试替换掉左上角纹理
         startDrawPicture();
         startDrawGrid();
     }
